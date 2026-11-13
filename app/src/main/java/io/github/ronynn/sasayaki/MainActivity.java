@@ -1,51 +1,26 @@
 package io.github.ronynn.sasayaki;
 
 import android.app.Activity;
-import android.app.ActivityManager;
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
-import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
-import android.os.StatFs;
-import android.provider.Settings;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.ListView;
-import android.widget.TabHost;
 import android.widget.TextView;
-import android.widget.Toast;
-
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
 
 public class MainActivity extends Activity {
 
     private AudioManager audioManager;
-    private TextView tvAudioStatus;
     private TextView tvBattery;
-    private TextView tvSysInfo;
-    private ListView lvApps;
-
-    private final List<AppEntry> appEntries = new ArrayList<AppEntry>();
-
-    // =================================================================
-    // Lifecycle
-    // =================================================================
+    private TextView tvStatus;
+    private Handler handler;
+    private Runnable batteryUpdater;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,380 +28,241 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        tvBattery = (TextView) findViewById(R.id.tv_battery);
+        tvStatus  = (TextView) findViewById(R.id.tv_status);
 
-        setupTabs();
-        setupAudioTab();
-        setupAppsTab();
-        setupBatteryTab();
-        setupSysInfoTab();
+        findViewById(R.id.btn_method1).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { method1_legacyComm(); }
+        });
+        findViewById(R.id.btn_method2).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { method2_aggressiveInCall(); }
+        });
+        findViewById(R.id.btn_method3).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { method3_communicationDevice(); }
+        });
+        findViewById(R.id.btn_method4).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { method4_reflectionForceUse(); }
+        });
+        findViewById(R.id.btn_method5).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { method5_reflectionPhoneState(); }
+        });
+        findViewById(R.id.btn_reset).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { resetAudio(); }
+        });
+
+        handler = new Handler(Looper.getMainLooper());
+        batteryUpdater = new Runnable() {
+            @Override public void run() {
+                updateBatteryInfo();
+                handler.postDelayed(this, 2000);
+            }
+        };
     }
 
-    @Override
-    protected void onResume() {
+    @Override protected void onResume() {
         super.onResume();
-        // Refresh battery + list every time the app comes back to foreground.
-        updateBatteryInfo();
-        if (hasUsageStatsPermission()) {
-            refreshAppList();
-        }
-        updateAudioStatus();
+        handler.post(batteryUpdater);
     }
 
-    private void setupTabs() {
-        TabHost tabHost = (TabHost) findViewById(android.R.id.tabhost);
-        tabHost.setup();
-
-        addTab(tabHost, "Audio", R.id.tab_audio);
-        addTab(tabHost, "Apps", R.id.tab_apps);
-        addTab(tabHost, "Battery", R.id.tab_battery);
-        addTab(tabHost, "System", R.id.tab_sysinfo);
+    @Override protected void onPause() {
+        super.onPause();
+        handler.removeCallbacks(batteryUpdater);
     }
 
-    private void addTab(TabHost host, String title, int viewId) {
-        TabHost.TabSpec spec = host.newTabSpec(title);
-        spec.setIndicator(title);
-        spec.setContent(viewId);
-        host.addTab(spec);
+    @Override protected void onDestroy() {
+        super.onDestroy();
+        // Safety net: if the app dies while routing is active, restore normal audio.
+        try { resetAudioInternal(); } catch (Exception ignored) {}
     }
 
-    // =================================================================
-    // 1. Audio routing
-    // =================================================================
-
-    private void setupAudioTab() {
-        tvAudioStatus = (TextView) findViewById(R.id.tv_audio_status);
-
-        Button on = (Button) findViewById(R.id.btn_earpiece_on);
-        on.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { routeToEarpiece(); }
-        });
-
-        Button off = (Button) findViewById(R.id.btn_earpiece_off);
-        off.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { restoreAudio(); }
-        });
-
-        updateAudioStatus();
-    }
-
+    // ================= METHOD 1: legacy communication mode =================
     @SuppressWarnings("deprecation")
-    private void routeToEarpiece() {
+    private void method1_legacyComm() {
         try {
-            // Set the audio mode first — required before routing.
             audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // API 31+ : modern API. Routes communication audio to earpiece.
-                AudioDeviceInfo earpiece = null;
-                for (AudioDeviceInfo dev : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
-                    if (dev.getType() == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) {
-                        earpiece = dev;
-                        break;
-                    }
-                }
-                if (earpiece != null) {
-                    audioManager.setCommunicationDevice(earpiece);
-                }
-                // Legacy fallback as a nudge — some OEMs honour it for media.
-                audioManager.setSpeakerphoneOn(false);
-            } else {
-                // Legacy path for pre-Android 12.
-                audioManager.setSpeakerphoneOn(false);
-            }
-
-            tvAudioStatus.setText("Status: earpiece (best-effort)");
-            Toast.makeText(this, "Audio routed to earpiece", Toast.LENGTH_SHORT).show();
+            audioManager.setSpeakerphoneOn(false);
+            showStatus("Method 1", "applied without exception");
         } catch (Exception e) {
-            tvAudioStatus.setText("Status: error — " + e.getMessage());
-            Toast.makeText(this, "Routing failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            showStatus("Method 1", "EXCEPTION: " + e.getMessage());
         }
     }
 
+    // ================= METHOD 2: aggressive MODE_IN_CALL ===================
     @SuppressWarnings("deprecation")
-    private void restoreAudio() {
+    private void method2_aggressiveInCall() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                audioManager.clearCommunicationDevice();
-            }
-            audioManager.setSpeakerphoneOn(true);
-            audioManager.setMode(AudioManager.MODE_NORMAL);
-            tvAudioStatus.setText("Status: normal");
-            Toast.makeText(this, "Normal audio restored", Toast.LENGTH_SHORT).show();
+            audioManager.setMode(AudioManager.MODE_IN_CALL);
+            audioManager.setSpeakerphoneOn(false);
+            showStatus("Method 2", "applied without exception");
         } catch (Exception e) {
-            tvAudioStatus.setText("Status: restore failed — " + e.getMessage());
-            Toast.makeText(this, "Restore failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            showStatus("Method 2", "EXCEPTION: " + e.getClass().getSimpleName()
+                + " - " + e.getMessage());
         }
     }
 
+    // ================= METHOD 3: modern API 31+ ============================
     @SuppressWarnings("deprecation")
-    private void updateAudioStatus() {
-        if (tvAudioStatus == null) return;
-        int mode = audioManager.getMode();
-        boolean speaker = audioManager.isSpeakerphoneOn();
-        String label;
-        if (mode == AudioManager.MODE_IN_COMMUNICATION) {
-            label = speaker ? "Status: in-communication, speaker ON"
-                            : "Status: in-communication, earpiece";
-        } else if (mode == AudioManager.MODE_NORMAL) {
-            label = "Status: normal";
-        } else {
-            label = "Status: mode=" + mode;
-        }
-        tvAudioStatus.setText(label);
-    }
-
-    // =================================================================
-    // 2. Running / recent apps (UsageStatsManager)
-    // =================================================================
-
-    private void setupAppsTab() {
-        lvApps = (ListView) findViewById(R.id.lv_apps);
-
-        Button grant = (Button) findViewById(R.id.btn_grant_usage);
-        grant.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (hasUsageStatsPermission()) {
-                    refreshAppList();
-                    Toast.makeText(MainActivity.this,
-                            "Usage access already granted — refreshing", Toast.LENGTH_SHORT).show();
-                } else {
-                    try {
-                        startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
-                    } catch (Exception e) {
-                        Toast.makeText(MainActivity.this,
-                                "Could not open Usage Access settings", Toast.LENGTH_LONG).show();
-                    }
-                }
-            }
-        });
-
-        lvApps.setOnItemClickListener(new android.widget.AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(android.widget.AdapterView<?> parent, View view,
-                                    int position, long id) {
-                AppEntry entry = appEntries.get(position);
-                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                intent.setData(Uri.parse("package:" + entry.packageName));
-                try {
-                    startActivity(intent);
-                } catch (Exception e) {
-                    Toast.makeText(MainActivity.this,
-                            "Cannot open App Info for " + entry.packageName,
-                            Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
-
-        refreshAppList();
-    }
-
-    private void refreshAppList() {
-        if (lvApps == null) return;
-
-        if (!hasUsageStatsPermission()) {
-            String[] placeholder = { "Grant Usage Access to see running apps" };
-            lvApps.setAdapter(new ArrayAdapter<String>(
-                    this, android.R.layout.simple_list_item_1, placeholder));
+    private void method3_communicationDevice() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            showStatus("Method 3", "requires Android 12+ (API 31)");
             return;
         }
-
-        UsageStatsManager usm =
-                (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        long now = System.currentTimeMillis();
-        // 30-minute window: apps active in the last half hour.
-        // Force-stopped apps drop out of UsageStats history, so they won't appear.
-        List<UsageStats> stats = usm.queryUsageStats(
-                UsageStatsManager.INTERVAL_BEST, now - 30L * 60L * 1000L, now);
-
-        appEntries.clear();
-        if (stats != null) {
-            for (UsageStats s : stats) {
-                if (s.getLastTimeUsed() > 0) {
-                    appEntries.add(new AppEntry(s.getPackageName(), s.getLastTimeUsed()));
-                }
+        try {
+            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            AudioDeviceInfo earpiece =
+                findAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE);
+            if (earpiece == null) {
+                showStatus("Method 3", "no earpiece device found");
+                return;
             }
-        }
-
-        Collections.sort(appEntries, new Comparator<AppEntry>() {
-            @Override public int compare(AppEntry a, AppEntry b) {
-                return Long.compare(b.lastUsed, a.lastUsed); // most recent first
-            }
-        });
-
-        List<String> labels = new ArrayList<String>();
-        PackageManager pm = getPackageManager();
-        for (AppEntry entry : appEntries) {
-            try {
-                ApplicationInfo ai = pm.getApplicationInfo(entry.packageName, 0);
-                String name = pm.getApplicationLabel(ai).toString();
-                labels.add(name + "\n" + entry.packageName);
-            } catch (PackageManager.NameNotFoundException e) {
-                labels.add(entry.packageName);
-            }
-        }
-
-        if (labels.isEmpty()) {
-            labels.add("(no recent apps in the last 30 minutes)");
-            appEntries.clear(); // prevent index errors on tap
-        }
-
-        lvApps.setAdapter(new ArrayAdapter<String>(
-                this, android.R.layout.simple_list_item_1, labels));
-    }
-
-    private boolean hasUsageStatsPermission() {
-        UsageStatsManager usm =
-                (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        long now = System.currentTimeMillis();
-        List<UsageStats> stats = usm.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY, now - 24L * 60L * 60L * 1000L, now);
-        return stats != null && !stats.isEmpty();
-    }
-
-    private static class AppEntry {
-        final String packageName;
-        final long lastUsed;
-        AppEntry(String pkg, long time) {
-            packageName = pkg;
-            lastUsed = time;
+            boolean ok = audioManager.setCommunicationDevice(earpiece);
+            showStatus("Method 3", ok ? "setCommunicationDevice returned TRUE"
+                                      : "setCommunicationDevice returned FALSE");
+        } catch (Exception e) {
+            showStatus("Method 3", "EXCEPTION: " + e.getMessage());
         }
     }
 
-    // =================================================================
-    // 3. Battery information
-    // =================================================================
+    // ================= METHOD 4: AudioSystem.setForceUse ===================
+    @SuppressWarnings("deprecation")
+    private void method4_reflectionForceUse() {
+        try {
+            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            audioManager.setSpeakerphoneOn(false);
 
-    private void setupBatteryTab() {
-        tvBattery = (TextView) findViewById(R.id.tv_battery);
-        updateBatteryInfo();
+            Class<?> audioSystem = Class.forName("android.media.AudioSystem");
+            // 1 = FOR_MEDIA, 0 = FORCE_NONE (forces default routing to policy)
+            java.lang.reflect.Method m =
+                audioSystem.getMethod("setForceUse", int.class, int.class);
+            Object result = m.invoke(null, 1, 0);
+            showStatus("Method 4", "setForceUse OK, returned: " + result);
+        } catch (Exception e) {
+            showStatus("Method 4", "EXCEPTION: " + e.getClass().getSimpleName()
+                + " - " + e.getMessage());
+        }
+    }
+
+    // ================= METHOD 5: AudioSystem.setPhoneState =================
+    @SuppressWarnings("deprecation")
+    private void method5_reflectionPhoneState() {
+        try {
+            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            audioManager.setSpeakerphoneOn(false);
+
+            Class<?> audioSystem = Class.forName("android.media.AudioSystem");
+            // 2 = MODE_IN_CALL, 3 = MODE_IN_COMMUNICATION
+            java.lang.reflect.Method m =
+                audioSystem.getMethod("setPhoneState", int.class);
+            Object result = m.invoke(null, 2);
+            showStatus("Method 5", "setPhoneState(IN_CALL) OK, returned: " + result);
+        } catch (Exception e) {
+            showStatus("Method 5", "EXCEPTION: " + e.getClass().getSimpleName()
+                + " - " + e.getMessage());
+        }
+    }
+
+    // ================= RESET ===============================================
+    @SuppressWarnings("deprecation")
+    private void resetAudio() {
+        try {
+            resetAudioInternal();
+            showStatus("RESET", "audio restored to normal");
+        } catch (Exception e) {
+            showStatus("RESET", "EXCEPTION: " + e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void resetAudioInternal() {
+        // 1. Clear communication device
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try { audioManager.clearCommunicationDevice(); } catch (Exception ignored) {}
+        }
+
+        // 2. Reset speakerphone + mode
+        try { audioManager.setSpeakerphoneOn(true); } catch (Exception ignored) {}
+        try { audioManager.setMode(AudioManager.MODE_NORMAL); } catch (Exception ignored) {}
+
+        // 3. Reset hidden APIs too (in case Method 4 or 5 was used)
+        try {
+            Class<?> audioSystem = Class.forName("android.media.AudioSystem");
+
+            java.lang.reflect.Method setPhoneState =
+                audioSystem.getMethod("setPhoneState", int.class);
+            setPhoneState.invoke(null, 0); // MODE_NORMAL
+
+            java.lang.reflect.Method setForceUse =
+                audioSystem.getMethod("setForceUse", int.class, int.class);
+            setForceUse.invoke(null, 1, 0); // FOR_MEDIA, FORCE_NONE
+        } catch (Exception ignored) {}
+    }
+
+    // ================= Helpers =============================================
+    private AudioDeviceInfo findAudioDevice(int type) {
+        for (AudioDeviceInfo d : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+            if (d.getType() == type) return d;
+        }
+        return null;
+    }
+
+    @SuppressWarnings("deprecation")
+    private void showStatus(String method, String result) {
+        String modeName;
+        try {
+            switch (audioManager.getMode()) {
+                case AudioManager.MODE_NORMAL: modeName = "NORMAL"; break;
+                case AudioManager.MODE_RINGTONE: modeName = "RINGTONE"; break;
+                case AudioManager.MODE_IN_CALL: modeName = "IN_CALL"; break;
+                case AudioManager.MODE_IN_COMMUNICATION: modeName = "IN_COMMUNICATION"; break;
+                default: modeName = "(" + audioManager.getMode() + ")"; break;
+            }
+        } catch (Exception e) { modeName = "?"; }
+
+        boolean sp = false;
+        try { sp = audioManager.isSpeakerphoneOn(); } catch (Exception ignored) {}
+
+        tvStatus.setText(method + ": " + result
+            + "\n\nAudio state now: mode=" + modeName + ", speaker=" + sp
+            + "\nListen to your music app — did it move to earpiece?");
     }
 
     private void updateBatteryInfo() {
         if (tvBattery == null) return;
-
         BatteryManager bm = (BatteryManager) getSystemService(Context.BATTERY_SERVICE);
+        Intent i = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
 
         int level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
         long currentNow = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
         long chargeCounter = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER);
 
-        // Status, health, voltage, temperature all come from the sticky broadcast —
-        // all available since API 1, so no version guard needed.
-        Intent batteryIntent = registerReceiver(null,
-                new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-
-        int voltage    = batteryIntent != null
-                ? batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) : -1;
-        int tempTenths = batteryIntent != null
-                ? batteryIntent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1) : -1;
-        int health     = batteryIntent != null
-                ? batteryIntent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1) : -1;
-        int status     = batteryIntent != null
-                ? batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS,
-                        BatteryManager.BATTERY_STATUS_UNKNOWN)
-                : BatteryManager.BATTERY_STATUS_UNKNOWN;
+        int voltage = i != null ? i.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) : -1;
+        int tempTenths = i != null ? i.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1) : -1;
+        int status = i != null ? i.getIntExtra(BatteryManager.EXTRA_STATUS,
+                BatteryManager.BATTERY_STATUS_UNKNOWN) : BatteryManager.BATTERY_STATUS_UNKNOWN;
 
         String statusText;
         switch (status) {
-            case BatteryManager.BATTERY_STATUS_CHARGING:      statusText = "Charging";     break;
-            case BatteryManager.BATTERY_STATUS_DISCHARGING:   statusText = "Discharging";  break;
-            case BatteryManager.BATTERY_STATUS_FULL:          statusText = "Full";         break;
-            case BatteryManager.BATTERY_STATUS_NOT_CHARGING:  statusText = "Not charging"; break;
-            default:                                          statusText = "Unknown";      break;
+            case BatteryManager.BATTERY_STATUS_CHARGING: statusText = "Charging"; break;
+            case BatteryManager.BATTERY_STATUS_DISCHARGING: statusText = "Discharging"; break;
+            case BatteryManager.BATTERY_STATUS_FULL: statusText = "Full"; break;
+            case BatteryManager.BATTERY_STATUS_NOT_CHARGING: statusText = "Not charging"; break;
+            default: statusText = "Unknown"; break;
         }
 
-        String healthText;
-        switch (health) {
-            case BatteryManager.BATTERY_HEALTH_GOOD:      healthText = "Good";      break;
-            case BatteryManager.BATTERY_HEALTH_OVERHEAT:  healthText = "Overheat";  break;
-            case BatteryManager.BATTERY_HEALTH_DEAD:      healthText = "Dead";      break;
-            case BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE: healthText = "Over voltage"; break;
-            case BatteryManager.BATTERY_HEALTH_COLD:      healthText = "Cold";      break;
-            default:                                      healthText = "Unknown";   break;
-        }
-
-        // Current may be Long.MIN_VALUE or 0 on some devices — handle gracefully.
         String currentStr;
         if (currentNow == Long.MIN_VALUE || currentNow == 0) {
             currentStr = "N/A";
         } else {
             currentStr = (currentNow / 1000L) + " mA"
-                    + (currentNow < 0 ? " (discharging)" : " (charging)");
+                + (currentNow < 0 ? " (discharging)" : " (charging)");
         }
 
         String chargeStr = (chargeCounter == Long.MIN_VALUE || chargeCounter == 0)
-                ? "N/A" : (chargeCounter / 1000L) + " mAh";
+            ? "N/A" : (chargeCounter / 1000L) + " mAh";
 
-        String info = "Level: " + level + "%\n"
-                + "Status: " + statusText + "\n"
-                + "Health: " + healthText + "\n"
-                + "Voltage: " + (voltage > 0 ? voltage + " mV" : "N/A") + "\n"
-                + "Temperature: " + (tempTenths > 0 ? (tempTenths / 10.0) + " °C" : "N/A") + "\n"
-                + "Current now: " + currentStr + "\n"
-                + "Charge counter: " + chargeStr;
-
-        tvBattery.setText(info);
-    }
-
-    // =================================================================
-    // 4. System information
-    // =================================================================
-
-    private void setupSysInfoTab() {
-        tvSysInfo = (TextView) findViewById(R.id.tv_sysinfo);
-        updateSystemInfo();
-    }
-
-    private void updateSystemInfo() {
-        if (tvSysInfo == null) return;
-
-        StringBuilder sb = new StringBuilder();
-
-        // Device / build
-        sb.append("Device: ").append(Build.MANUFACTURER).append(" ").append(Build.MODEL).append("\n");
-        sb.append("Android: ").append(Build.VERSION.RELEASE)
-          .append(" (API ").append(Build.VERSION.SDK_INT).append(")\n");
-        sb.append("CPU cores: ").append(Runtime.getRuntime().availableProcessors()).append("\n");
-        sb.append("ABI: ").append(Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "?")
-          .append("\n\n");
-
-        // RAM
-        ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-        ActivityManager.MemoryInfo memInfo = new ActivityManager.MemoryInfo();
-        am.getMemoryInfo(memInfo);
-        sb.append("Total RAM: ").append(memInfo.totalMem / (1024 * 1024)).append(" MB\n");
-        sb.append("Available RAM: ").append(memInfo.availMem / (1024 * 1024)).append(" MB\n");
-        sb.append("Low memory: ").append(memInfo.lowMemory).append("\n\n");
-
-        // Storage
-        try {
-            StatFs stat = new StatFs(Environment.getDataDirectory().getPath());
-            long totalBytes = stat.getBlockCountLong() * stat.getBlockSizeLong();
-            long freeBytes  = stat.getAvailableBlocksLong() * stat.getBlockSizeLong();
-            sb.append("Internal storage total: ").append(totalBytes / (1024 * 1024)).append(" MB\n");
-            sb.append("Internal storage free:  ").append(freeBytes  / (1024 * 1024)).append(" MB\n\n");
-        } catch (Exception ignored) { }
-
-        // Extra details from /proc/meminfo (usually readable for non-root).
-        try {
-            BufferedReader br = new BufferedReader(new FileReader("/proc/meminfo"));
-            try {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    if (line.startsWith("MemTotal")
-                            || line.startsWith("MemFree")
-                            || line.startsWith("Buffers")
-                            || line.startsWith("Cached")
-                            || line.startsWith("SwapTotal")
-                            || line.startsWith("SwapFree")) {
-                        sb.append(line).append("\n");
-                    }
-                }
-            } finally {
-                br.close();
-            }
-        } catch (Exception ignored) { }
-
-        tvSysInfo.setText(sb.toString());
+        tvBattery.setText("🔋 " + level + "%  •  " + statusText
+            + "  •  " + (voltage > 0 ? voltage + " mV" : "— mV")
+            + "  •  " + (tempTenths > 0 ? (tempTenths / 10.0) + "°C" : "—°C")
+            + "\nCurrent: " + currentStr + "  •  Counter: " + chargeStr);
     }
 }
