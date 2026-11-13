@@ -3,10 +3,10 @@ apply plugin: 'com.android.application'
 android {
     compileSdkVersion 36
     
-    namespace "io.github.ronynn.shintaku"
+    namespace "io.github.ronynn.sasayaki"
 
     defaultConfig {
-        applicationId "io.github.ronynn.shintaku"
+        applicationId "io.github.ronynn.sasayaki"
         minSdkVersion 21
         targetSdkVersion 36
         versionCode 1

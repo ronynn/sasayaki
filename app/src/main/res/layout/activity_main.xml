@@ -1,39 +1,102 @@
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
+<?xml version="1.0" encoding="utf-8"?>
+<TabHost xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/tabhost"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:fitsSystemWindows="true
+    android:layout_height="match_parent">
 
-    <!-- Splash Screen (Black Background + Loading Indicator) -->
-    <RelativeLayout
-        android:id="@+id/splash_screen"
+    <LinearLayout
+        android:orientation="vertical"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#000000"
-        android:gravity="center">
+        android:layout_height="match_parent">
 
-        <ProgressBar
-            android:id="@+id/progress_bar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
-            android:indeterminate="true"/>
+        <TabWidget
+            android:id="@android:id/tabs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/progress_bar"
-            android:layout_centerHorizontal="true"
-            android:text="_initialising _ronynn OS..."
-            android:textColor="#ebdbb2"
-            android:paddingTop="16dp"/>
-    </RelativeLayout>
+        <FrameLayout
+            android:id="@android:id/tabcontent"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
 
-    <!-- WebView (Initially Hidden) -->
-    <WebView
-        android:id="@+id/activity_main_webview"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone"/>
+            <!-- TAB 1: Audio routing -->
+            <LinearLayout
+                android:id="@+id/tab_audio"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
 
-</RelativeLayout>
+                <Button
+                    android:id="@+id/btn_earpiece_on"
+                    android:text="Route audio to earpiece"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <Button
+                    android:id="@+id/btn_earpiece_off"
+                    android:text="Restore normal audio routing"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_audio_status"
+                    android:layout_marginTop="16dp"
+                    android:text="Status: normal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <!-- TAB 2: Running / recent apps -->
+            <LinearLayout
+                android:id="@+id/tab_apps"
+                android:orientation="vertical"
+                android:padding="8dp"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <Button
+                    android:id="@+id/btn_grant_usage"
+                    android:text="Grant Usage Access permission"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <ListView
+                    android:id="@+id/lv_apps"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
+            <!-- TAB 3: Battery info -->
+            <ScrollView
+                android:id="@+id/tab_battery"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/tv_battery"
+                    android:padding="16dp"
+                    android:textSize="16sp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </ScrollView>
+
+            <!-- TAB 4: System info -->
+            <ScrollView
+                android:id="@+id/tab_sysinfo"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/tv_sysinfo"
+                    android:padding="16dp"
+                    android:textSize="16sp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </ScrollView>
+        </FrameLayout>
+    </LinearLayout>
+</TabHost>
