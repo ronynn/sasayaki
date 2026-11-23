@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.net.VpnService;
 import android.os.Build;
@@ -43,14 +44,7 @@ public class ThrottleVpnService extends VpnService
     int upKbps = intent != null ? intent.getIntExtra(EXTRA_UP, 150) : 150;
 
     Notification notif = buildNotification(downKbps, upKbps);
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-    {
-      startForeground(1, notif);
-    }
-    else
-    {
-      startForeground(1, notif);
-    }
+    startForeground(1, notif);
 
     startVpn(downKbps, upKbps);
     return START_STICKY;
@@ -260,10 +254,6 @@ public class ThrottleVpnService extends VpnService
       .setContentText("Down " + downKbps + " Kbps / Up " + upKbps + " Kbps")
       .setSmallIcon(android.R.drawable.ic_media_pause);
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-    {
-      return builder.build();
-    }
     return builder.build();
   }
 
