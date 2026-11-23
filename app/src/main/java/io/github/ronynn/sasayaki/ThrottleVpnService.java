@@ -15,8 +15,10 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ThrottleVpnService extends VpnService
 {
@@ -29,6 +31,18 @@ public class ThrottleVpnService extends VpnService
   private ParcelFileDescriptor tunFd;
   private Thread loopThread;
   private volatile boolean running;
+
+  private static class NatEntry
+  {
+    final byte[] clientIp;
+    final int clientPort;
+
+    NatEntry(byte[] clientIp, int clientPort)
+    {
+      this.clientIp = clientIp;
+      this.clientPort = clientPort;
+    }
+  }
 
   // Service lifecycle
   @Override
@@ -92,13 +106,54 @@ public class ThrottleVpnService extends VpnService
   {
     FileInputStream in = new FileInputStream(tunFd.getFileDescriptor());
     FileOutputStream out = new FileOutputStream(tunFd.getFileDescriptor());
-    byte[] buffer = new byte[32767];
+    ConcurrentHashMap<Integer, NatEntry> natTable = new ConcurrentHashMap<>();
 
     try (DatagramSocket relaySocket = new DatagramSocket())
     {
       protect(relaySocket);
-      relaySocket.setSoTimeout(250);
+      relaySocket.setSoTimeout(200);
 
+      int localPort = relaySocket.getLocalPort();
+
+      Thread rxThread = new Thread(() -> {
+        byte[] respBuf = new byte[4096];
+        DatagramPacket recvPkt = new DatagramPacket(respBuf, respBuf.length);
+        while (running && !Thread.currentThread().isInterrupted())
+        {
+          try
+          {
+            relaySocket.receive(recvPkt);
+            byte[] remoteIp = recvPkt.getAddress() != null ? recvPkt.getAddress().getAddress() : null;
+            int remotePort = recvPkt.getPort();
+            int payloadLen = recvPkt.getLength();
+            NatEntry entry = natTable.get(remotePort);
+
+            if (remoteIp != null && payloadLen > 0 && entry != null)
+            {
+              byte[] replyIpPacket = buildIpv4UdpPacket(remoteIp, entry.clientIp, remotePort, entry.clientPort, respBuf, payloadLen);
+              downBucket.consume(replyIpPacket.length);
+              synchronized (out)
+              {
+                out.write(replyIpPacket);
+              }
+            }
+          }
+          catch (SocketTimeoutException ignored)
+          {
+          }
+          catch (IOException | InterruptedException e)
+          {
+            if (running)
+            {
+              Thread.currentThread().interrupt();
+            }
+            break;
+          }
+        }
+      }, "SasayakiUdpRx");
+      rxThread.start();
+
+      byte[] buffer = new byte[32767];
       while (running && !Thread.interrupted())
       {
         int len = in.read(buffer);
@@ -110,8 +165,6 @@ public class ThrottleVpnService extends VpnService
 
           if (version == 4 && protocol == 17 && len >= ihl + 8)
           {
-            upBucket.consume(len);
-
             byte[] srcIp = Arrays.copyOfRange(buffer, 12, 16);
             byte[] dstIp = Arrays.copyOfRange(buffer, 16, 20);
             int srcPort = ((buffer[ihl] & 0xFF) << 8) | (buffer[ihl + 1] & 0xFF);
@@ -122,29 +175,17 @@ public class ThrottleVpnService extends VpnService
 
             if (payloadLen > 0)
             {
+              upBucket.consume(len);
+              natTable.put(dstPort, new NatEntry(srcIp, srcPort));
               InetAddress targetAddr = InetAddress.getByAddress(dstIp);
               DatagramPacket sendPkt = new DatagramPacket(buffer, payloadOffset, payloadLen, targetAddr, dstPort);
               relaySocket.send(sendPkt);
-
-              byte[] respBuf = new byte[4096];
-              DatagramPacket recvPkt = new DatagramPacket(respBuf, respBuf.length);
-              try
-              {
-                relaySocket.receive(recvPkt);
-                byte[] replyIpPacket = buildIpv4UdpPacket(dstIp, srcIp, dstPort, srcPort, respBuf, recvPkt.getLength());
-                downBucket.consume(replyIpPacket.length);
-                synchronized (out)
-                {
-                  out.write(replyIpPacket);
-                }
-              }
-              catch (IOException ignored)
-              {
-              }
             }
           }
         }
       }
+
+      rxThread.interrupt();
     }
     catch (IOException | InterruptedException e)
     {
