@@ -1,44 +1,48 @@
 apply plugin: 'com.android.application'
 
-android {
-    compileSdkVersion 36
-    
-    namespace "io.github.ronynn.sasayaki"
+android
+{
+  compileSdkVersion 36
+  namespace "io.github.ronynn.sasayaki"
 
-    defaultConfig {
-        applicationId "io.github.ronynn.sasayaki"
-        minSdkVersion 21
-        targetSdkVersion 36
-        versionCode 1
-        versionName "1.1"
-    }
-    
-    signingConfigs {
-        release {
-            storeFile file("$rootDir/keystore.jks")
-            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: ""
-            keyAlias System.getenv("ANDROID_KEY_ALIAS") ?: ""
-            keyPassword System.getenv("ANDROID_KEY_PASSWORD") ?: ""
-        }
-    }
-    
-    dependenciesInfo {
-        // Disables dependency metadata when building APKs.
-        includeInApk = false
-        // Disables dependency metadata when building Android App Bundles.
-        includeInBundle = false
-    }
+  defaultConfig
+  {
+    applicationId "io.github.ronynn.sasayaki"
+    minSdkVersion 21
+    targetSdkVersion 36
+    versionCode 1
+    versionName "1.1"
+  }
 
-
-    buildTypes {
-        release {
-            minifyEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
-        }
+  signingConfigs
+  {
+    release
+    {
+      storeFile file("$rootDir/keystore.jks")
+      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: ""
+      keyAlias System.getenv("ANDROID_KEY_ALIAS") ?: ""
+      keyPassword System.getenv("ANDROID_KEY_PASSWORD") ?: ""
     }
+  }
+
+  dependenciesInfo
+  {
+    includeInApk = false
+    includeInBundle = false
+  }
+
+  buildTypes
+  {
+    release
+    {
+      minifyEnabled true
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+      signingConfig signingConfigs.release
+    }
+  }
 }
 
-dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+dependencies
+{
+  implementation fileTree(dir: 'libs', include: ['*.jar'])
 }

@@ -1,73 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:orientation="vertical"
+  android:padding="20dp">
+
+  <TextView
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="Sasayaki Speed Saver"
+    android:textSize="22sp"
+    android:layout_marginBottom="16dp" />
+
+  <LinearLayout
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fitsSystemWindows="true">
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:layout_marginBottom="20dp">
 
-    <LinearLayout
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+    <Button
+      android:id="@+id/btn2g"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:text="2G 150k" />
 
-        <TextView
-            android:id="@+id/tv_battery"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+    <Button
+      android:id="@+id/btnSlow3g"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:text="Slow 3G 400k" />
 
-        <TextView
-            android:text="— Try each method while music is playing. Stop at the one that works. —"
-            android:textSize="12sp"
-            android:layout_marginTop="12dp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+    <Button
+      android:id="@+id/btn3g"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:text="3G 900k" />
+  </LinearLayout>
 
-        <Button
-            android:id="@+id/btn_method1"
-            android:text="1. MODE_IN_COMMUNICATION + speaker off"
-            android:layout_marginTop="12dp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+  <EditText
+    android:id="@+id/etDownKbps"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:hint="Download speed (Kbps)"
+    android:inputType="number"
+    android:text="400"
+    android:layout_marginBottom="12dp" />
 
-        <Button
-            android:id="@+id/btn_method2"
-            android:text="2. MODE_IN_CALL + speaker off (FDroid style)"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+  <EditText
+    android:id="@+id/etUpKbps"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:hint="Upload speed (Kbps)"
+    android:inputType="number"
+    android:text="150"
+    android:layout_marginBottom="20dp" />
 
-        <Button
-            android:id="@+id/btn_method3"
-            android:text="3. setCommunicationDevice (API 31+)"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+  <Button
+    android:id="@+id/btnStartStop"
+    android:layout_width="match_parent"
+    android:layout_height="52dp"
+    android:text="Start" />
 
-        <Button
-            android:id="@+id/btn_method4"
-            android:text="4. AudioSystem.setForceUse(FOR_MEDIA)"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <Button
-            android:id="@+id/btn_method5"
-            android:text="5. AudioSystem.setPhoneState(IN_CALL)"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <Button
-            android:id="@+id/btn_reset"
-            android:text="⟲ RESTORE NORMAL (try this if stuck)"
-            android:layout_marginTop="20dp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <TextView
-            android:id="@+id/tv_status"
-            android:text="Status: idle"
-            android:textSize="13sp"
-            android:layout_marginTop="16dp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
-</ScrollView>
+</LinearLayout>
